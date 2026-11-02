@@ -1,0 +1,19 @@
+
+workflows:
+  android-workflow:
+    name: Pontaj Android
+    max_build_duration: 60
+    instance_type: linux_x2
+
+    environment:
+      java: 17
+
+    scripts:
+      - name: Verificare Gradle
+        script: gradle --version
+
+      - name: Construire APK
+        script: gradle assembleDebug
+
+    artifacts:
+      - app/build/outputs/apk/debug/*.apk
