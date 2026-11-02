@@ -2,6 +2,7 @@
 package ro.pontaj.app
 
 import android.app.Activity
+import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.os.Bundle
 import android.graphics.Color
@@ -12,6 +13,8 @@ import android.widget.*
 import android.text.InputType
 import android.content.Context
 import java.util.Calendar
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 class MainActivity : Activity() {
 
@@ -19,21 +22,23 @@ class MainActivity : Activity() {
         getSharedPreferences("pontaj_data", Context.MODE_PRIVATE)
     }
 
-    private var month = Calendar.getInstance().get(Calendar.MONTH)
-    private var year = Calendar.getInstance().get(Calendar.YEAR)
+    private val dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale("ro", "RO"))
+
+    private var startDate = Calendar.getInstance().apply {
+        set(Calendar.DAY_OF_MONTH, 1)
+    }
+
+    private var endDate = Calendar.getInstance()
+
     private var hourlyRate = 0.0
     private var currency = "RON"
 
     private lateinit var content: LinearLayout
-    private lateinit var monthTitle: TextView
+    private lateinit var periodText: TextView
     private lateinit var totalHours: TextView
     private lateinit var totalPay: TextView
-
-    private val months = arrayOf(
-        "Ianuarie", "Februarie", "Martie", "Aprilie",
-        "Mai", "Iunie", "Iulie", "August",
-        "Septembrie", "Octombrie", "Noiembrie", "Decembrie"
-    )
+    private lateinit var startButton: Button
+    private lateinit var endButton: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,69 +47,63 @@ class MainActivity : Activity() {
         currency = prefs.getString("currency", "RON") ?: "RON"
 
         buildScreen()
-        showMonth()
+        showPeriod()
     }
 
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density).toInt()
 
+    private fun dateKey(date: Calendar): String =
+        "%04d-%02d-%02d".format(
+            date.get(Calendar.YEAR),
+            date.get(Calendar.MONTH) + 1,
+            date.get(Calendar.DAY_OF_MONTH)
+        )
+
     private fun buildScreen() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.rgb(247, 248, 250))
-            setPadding(dp(14), dp(12), dp(14), dp(12))
+            setPadding(dp(12), dp(10), dp(12), dp(10))
         }
 
         val title = TextView(this).apply {
-            text = "PONTAJ BY MISCUALAE"
+            text = "PONTAJ BY MISCULAE"
             textSize = 23f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.rgb(25, 45, 75))
             gravity = Gravity.CENTER
-            setPadding(0, dp(12), 0, dp(16))
+            setPadding(0, dp(10), 0, dp(14))
         }
         root.addView(title)
 
-        val navigation = LinearLayout(this).apply {
-            gravity = Gravity.CENTER
-            orientation = LinearLayout.HORIZONTAL
-        }
-
-        val previous = Button(this).apply {
-            text = "‹"
-            setOnClickListener {
-                month--
-                if (month < 0) {
-                    month = 11
-                    year--
-                }
-                showMonth()
-            }
-        }
-
-        monthTitle = TextView(this).apply {
-            textSize = 18f
+        periodText = TextView(this).apply {
+            textSize = 17f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             setTextColor(Color.BLACK)
+            text = "Selectează perioada"
+        }
+        root.addView(periodText)
+
+        val dateButtons = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
         }
 
-        val next = Button(this).apply {
-            text = "›"
-            setOnClickListener {
-                month++
-                if (month > 11) {
-                    month = 0
-                    year++
-                }
-                showMonth()
-            }
+        startButton = Button(this).apply {
+            textSize = 12f
+            setOnClickListener { chooseDate(true) }
         }
 
-        navigation.addView(previous)
-        navigation.addView(monthTitle, LinearLayout.LayoutParams(0, dp(48), 1f))
-        navigation.addView(next)
-        root.addView(navigation)
+        endButton = Button(this).apply {
+            textSize = 12f
+            setOnClickListener { chooseDate(false) }
+        }
+
+        dateButtons.addView(startButton, LinearLayout.LayoutParams(0, dp(50), 1f))
+        dateButtons.addView(endButton, LinearLayout.LayoutParams(0, dp(50), 1f))
+        root.addView(dateButtons)
 
         val settings = Button(this).apply {
             text = "Setare tarif orar"
@@ -116,7 +115,7 @@ class MainActivity : Activity() {
             textSize = 17f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.rgb(30, 70, 110))
-            setPadding(dp(8), dp(12), dp(8), dp(5))
+            setPadding(dp(8), dp(8), dp(8), dp(4))
         }
         root.addView(totalHours)
 
@@ -124,7 +123,7 @@ class MainActivity : Activity() {
             textSize = 17f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.rgb(30, 120, 70))
-            setPadding(dp(8), dp(4), dp(8), dp(12))
+            setPadding(dp(8), dp(4), dp(8), dp(10))
         }
         root.addView(totalPay)
 
@@ -133,11 +132,39 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
         }
         scroll.addView(content)
+
         root.addView(scroll, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
         ))
 
         setContentView(root)
+    }
+
+    private fun chooseDate(isStart: Boolean) {
+        val selected = if (isStart) startDate else endDate
+
+        DatePickerDialog(
+            this,
+            { _, y, m, d ->
+                val chosen = Calendar.getInstance().apply {
+                    set(y, m, d, 0, 0, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }
+
+                if (isStart) {
+                    startDate = chosen
+                    if (startDate.after(endDate)) endDate = chosen.clone() as Calendar
+                } else {
+                    endDate = chosen
+                    if (endDate.before(startDate)) startDate = chosen.clone() as Calendar
+                }
+
+                showPeriod()
+            },
+            selected.get(Calendar.YEAR),
+            selected.get(Calendar.MONTH),
+            selected.get(Calendar.DAY_OF_MONTH)
+        ).show()
     }
 
     private fun editRate() {
@@ -148,14 +175,15 @@ class MainActivity : Activity() {
             hint = "Tarif pe oră"
         }
 
-        val currencies = arrayOf("RON", "EUR", "USD")
         val spinner = Spinner(this)
         spinner.adapter = ArrayAdapter(
             this,
             android.R.layout.simple_spinner_dropdown_item,
-            currencies
+            arrayOf("RON", "EUR", "USD")
         )
-        spinner.setSelection(currencies.indexOf(currency).coerceAtLeast(0))
+        spinner.setSelection(
+            arrayOf("RON", "EUR", "USD").indexOf(currency).coerceAtLeast(0)
+        )
 
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -168,51 +196,58 @@ class MainActivity : Activity() {
             .setTitle("Tarif orar")
             .setView(box)
             .setPositiveButton("Salvează") { _, _ ->
-                hourlyRate = input.text.toString().replace(",", ".")
-                    .toDoubleOrNull() ?: 0.0
+                hourlyRate = input.text.toString()
+                    .replace(",", ".").toDoubleOrNull() ?: 0.0
                 currency = spinner.selectedItem.toString()
+
                 prefs.edit()
                     .putString("rate", hourlyRate.toString())
                     .putString("currency", currency)
                     .apply()
-                showMonth()
+
+                showPeriod()
             }
             .setNegativeButton("Anulează", null)
             .show()
     }
 
-    private fun key(day: Int, type: String): String =
-        "${year}_${month}_${day}_$type"
+    private fun key(date: Calendar, type: String): String =
+        "${dateKey(date)}_$type"
 
-    private fun getTime(day: Int, type: String): String =
-        prefs.getString(key(day, type), "") ?: ""
+    private fun getTime(date: Calendar, type: String): String =
+        prefs.getString(key(date, type), "") ?: ""
 
-    private fun saveTime(day: Int, type: String, value: String) {
-        prefs.edit().putString(key(day, type), value).apply()
+    private fun saveTime(date: Calendar, type: String, value: String) {
+        prefs.edit().putString(key(date, type), value).apply()
     }
 
-    private fun workedHours(day: Int): Double {
-        val start = getTime(day, "in")
-        val end = getTime(day, "out")
+    private fun workedHours(date: Calendar): Double {
+        val start = getTime(date, "in")
+        val end = getTime(date, "out")
+
         if (start.isBlank() || end.isBlank()) return 0.0
 
         return try {
             val a = start.split(":")
             val b = end.split(":")
+
             val startMinutes = a[0].toInt() * 60 + a[1].toInt()
             var endMinutes = b[0].toInt() * 60 + b[1].toInt()
+
             if (endMinutes < startMinutes) endMinutes += 24 * 60
+
             (endMinutes - startMinutes) / 60.0
         } catch (_: Exception) {
             0.0
         }
     }
 
-    private fun chooseTime(day: Int, type: String) {
-        val calendar = Calendar.getInstance()
-        val current = getTime(day, type)
-        var hour = calendar.get(Calendar.HOUR_OF_DAY)
-        var minute = calendar.get(Calendar.MINUTE)
+    private fun chooseTime(date: Calendar, type: String) {
+        val current = getTime(date, type)
+        val now = Calendar.getInstance()
+
+        var hour = now.get(Calendar.HOUR_OF_DAY)
+        var minute = now.get(Calendar.MINUTE)
 
         if (current.contains(":")) {
             try {
@@ -223,88 +258,96 @@ class MainActivity : Activity() {
 
         TimePickerDialog(this, { _, h, m ->
             val value = "%02d:%02d".format(h, m)
-            saveTime(day, type, value)
-            showMonth()
+            saveTime(date, type, value)
+            showPeriod()
         }, hour, minute, true).show()
     }
 
-    private fun showMonth() {
-        monthTitle.text = "${months[month]} $year"
+    private fun showPeriod() {
+        startButton.text = "De la: ${dateFormat.format(startDate.time)}"
+        endButton.text = "Până la: ${dateFormat.format(endDate.time)}"
+
+        periodText.text =
+            "${dateFormat.format(startDate.time)} – ${dateFormat.format(endDate.time)}"
+
         content.removeAllViews()
 
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setBackgroundColor(Color.rgb(30, 55, 85))
-            setPadding(dp(4), dp(10), dp(4), dp(10))
+            setPadding(dp(3), dp(8), dp(3), dp(8))
         }
 
-        listOf("Zi", "Intrare", "Ieșire", "Ore").forEach {
+        listOf("Data", "Intrare", "Ieșire", "Ore").forEach {
             val text = TextView(this).apply {
                 this.text = it
-                textSize = 13f
+                textSize = 12f
                 typeface = Typeface.DEFAULT_BOLD
                 setTextColor(Color.WHITE)
                 gravity = Gravity.CENTER
             }
-            header.addView(text, LinearLayout.LayoutParams(0, dp(32), 1f))
+            header.addView(text, LinearLayout.LayoutParams(0, dp(34), 1f))
         }
+
         content.addView(header)
 
-        val calendar = Calendar.getInstance()
-        calendar.set(year, month, 1)
-        val days = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
-
         var sum = 0.0
+        val current = startDate.clone() as Calendar
 
-        for (day in 1..days) {
-            val hours = workedHours(day)
+        while (!current.after(endDate)) {
+            val date = current.clone() as Calendar
+            val hours = workedHours(date)
             sum += hours
 
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(3), dp(5), dp(3), dp(5))
+                setPadding(dp(2), dp(5), dp(2), dp(5))
+
                 setBackgroundColor(
                     when {
                         hours == 0.0 -> Color.rgb(235, 237, 240)
                         hours < 10 -> Color.WHITE
                         hours < 12 -> Color.rgb(220, 245, 220)
                         hours < 14 -> Color.rgb(160, 220, 165)
-                        else -> Color.rgb(90, 175, 105)
+                        else -> Color.rgb(215, 125, 125)
                     }
                 )
             }
 
             val dayText = TextView(this).apply {
-                text = day.toString()
-                textSize = 14f
+                text = "%02d.%02d".format(
+                    date.get(Calendar.DAY_OF_MONTH),
+                    date.get(Calendar.MONTH) + 1
+                )
+                textSize = 12f
                 gravity = Gravity.CENTER
                 setTextColor(Color.BLACK)
             }
-            row.addView(dayText, LinearLayout.LayoutParams(0, dp(48), 0.65f))
+            row.addView(dayText, LinearLayout.LayoutParams(0, dp(52), 0.9f))
 
             val entry = Button(this).apply {
-                text = getTime(day, "in").ifBlank { "--:--" }
-                textSize = 11f
-                setOnClickListener { chooseTime(day, "in") }
+                text = getTime(date, "in").ifBlank { "--:--" }
+                textSize = 14f
+                setOnClickListener { chooseTime(date, "in") }
             }
-            row.addView(entry, LinearLayout.LayoutParams(0, dp(44), 1.15f))
+            row.addView(entry, LinearLayout.LayoutParams(0, dp(48), 1.1f))
 
             val exit = Button(this).apply {
-                text = getTime(day, "out").ifBlank { "--:--" }
-                textSize = 11f
-                setOnClickListener { chooseTime(day, "out") }
+                text = getTime(date, "out").ifBlank { "--:--" }
+                textSize = 14f
+                setOnClickListener { chooseTime(date, "out") }
             }
-            row.addView(exit, LinearLayout.LayoutParams(0, dp(44), 1.15f))
+            row.addView(exit, LinearLayout.LayoutParams(0, dp(48), 1.1f))
 
             val hoursText = TextView(this).apply {
                 text = if (hours == 0.0) "0" else "%.2f".format(hours)
-                textSize = 13f
+                textSize = 14f
                 typeface = Typeface.DEFAULT_BOLD
                 gravity = Gravity.CENTER
                 setTextColor(Color.BLACK)
             }
-            row.addView(hoursText, LinearLayout.LayoutParams(0, dp(48), 1f))
+            row.addView(hoursText, LinearLayout.LayoutParams(0, dp(52), 1f))
 
             content.addView(row)
 
@@ -314,6 +357,8 @@ class MainActivity : Activity() {
             content.addView(divider, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(1)
             ))
+
+            current.add(Calendar.DAY_OF_MONTH, 1)
         }
 
         totalHours.text = "Total ore: %.2f".format(sum)
