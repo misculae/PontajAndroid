@@ -1,4 +1,3 @@
-
 workflows:
   android-workflow:
     name: Pontaj Android
@@ -9,11 +8,10 @@ workflows:
       java: 17
 
     scripts:
-      - name: Verificare Gradle
-        script: gradle --version
-
       - name: Construire APK
-        script: gradle assembleDebug
+        script: |
+          cd $CM_BUILD_DIR
+          gradle --no-daemon assembleDebug
 
     artifacts:
       - app/build/outputs/apk/debug/*.apk
