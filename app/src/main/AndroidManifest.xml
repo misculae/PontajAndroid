@@ -3,7 +3,9 @@
 
     <application
         android:allowBackup="true"
-        android:label="Pontaj"
+        android:label="Pontaj by Misculae"
+        android:icon="@drawable/ic_launcher"
+        android:roundIcon="@drawable/ic_launcher"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:supportsRtl="true">
 
