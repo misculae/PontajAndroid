@@ -181,6 +181,27 @@ class MainActivity : Activity() {
         }
         root.addView(totalPay)
 
+        val saveButton = Button(this).apply {
+            text = "SALVEAZĂ PONTAJUL"
+            textSize = 16f
+            typeface = Typeface.DEFAULT_BOLD
+            setOnClickListener {
+                val saved = prefs.edit().commit()
+                Toast.makeText(
+                    this@MainActivity,
+                    if (saved) "Pontajul a fost salvat." else "Eroare la salvare. Încearcă din nou.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+        root.addView(
+            saveButton,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(52)
+            )
+        )
+
         val scroll = ScrollView(this)
         content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -392,7 +413,7 @@ class MainActivity : Activity() {
         prefs.getString(dataKey(date, type), "") ?: ""
 
     private fun saveTime(date: Calendar, type: String, value: String) {
-        prefs.edit().putString(dataKey(date, type), value).apply()
+        prefs.edit().putString(dataKey(date, type), value).commit()
     }
 
     private fun enterHour(date: Calendar, type: String) {
