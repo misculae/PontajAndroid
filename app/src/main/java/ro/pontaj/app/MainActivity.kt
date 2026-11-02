@@ -59,6 +59,7 @@ class MainActivity : Activity() {
         if (activeContract !in contracts) activeContract = contracts.first()
 
         loadContractSettings()
+        loadContractPeriod()
         buildScreen()
         showPeriod()
     }
@@ -91,6 +92,34 @@ class MainActivity : Activity() {
 
         currency = prefs.getString(settingKey("currency"), "RON") ?: "RON"
     }
+
+    private fun loadContractPeriod() {
+        val defaultStart = Calendar.getInstance().apply {
+            set(Calendar.DAY_OF_MONTH, 1)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val defaultEnd = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+
+        val savedStart = prefs.getLong(settingKey("period_start"), defaultStart.timeInMillis)
+        val savedEnd = prefs.getLong(settingKey("period_end"), defaultEnd.timeInMillis)
+
+        startDate = Calendar.getInstance().apply { timeInMillis = savedStart }
+        endDate = Calendar.getInstance().apply { timeInMillis = savedEnd }
+    }
+
+    private fun saveContractPeriod(): Boolean =
+        prefs.edit()
+            .putLong(settingKey("period_start"), startDate.timeInMillis)
+            .putLong(settingKey("period_end"), endDate.timeInMillis)
+            .commit()
 
     private fun buildScreen() {
         val root = LinearLayout(this).apply {
@@ -186,7 +215,7 @@ class MainActivity : Activity() {
             textSize = 16f
             typeface = Typeface.DEFAULT_BOLD
             setOnClickListener {
-                val saved = prefs.edit().commit()
+                val saved = saveContractPeriod() && prefs.edit().commit()
                 Toast.makeText(
                     this@MainActivity,
                     if (saved) "Pontajul a fost salvat." else "Eroare la salvare. Încearcă din nou.",
@@ -241,6 +270,7 @@ class MainActivity : Activity() {
                             .putString("active_contract", activeContract)
                             .apply()
                         loadContractSettings()
+                        loadContractPeriod()
                         updateContractTitle()
                         showPeriod()
                     }
@@ -357,6 +387,7 @@ class MainActivity : Activity() {
                     }
                 }
 
+                saveContractPeriod()
                 showPeriod()
             },
             selected.get(Calendar.YEAR),
