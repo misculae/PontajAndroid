@@ -3,7 +3,7 @@ package ro.pontaj.app
 
 import android.app.Activity
 import android.app.DatePickerDialog
-import android.app.TimePickerDialog
+import android.app.AlertDialog
 import android.os.Bundle
 import android.graphics.Color
 import android.graphics.Typeface
@@ -15,6 +15,7 @@ import android.content.Context
 import java.util.Calendar
 import java.text.SimpleDateFormat
 import java.util.Locale
+import java.util.Base64
 
 class MainActivity : Activity() {
 
@@ -23,6 +24,9 @@ class MainActivity : Activity() {
     }
 
     private val dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale("ro", "RO"))
+
+    private var contracts = mutableListOf<String>()
+    private var activeContract = "General"
 
     private var startDate = Calendar.getInstance().apply {
         set(Calendar.DAY_OF_MONTH, 1)
@@ -34,6 +38,7 @@ class MainActivity : Activity() {
     private var currency = "RON"
 
     private lateinit var content: LinearLayout
+    private lateinit var contractText: TextView
     private lateinit var periodText: TextView
     private lateinit var totalHours: TextView
     private lateinit var totalPay: TextView
@@ -43,9 +48,17 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        hourlyRate = prefs.getString("rate", "0")?.toDoubleOrNull() ?: 0.0
-        currency = prefs.getString("currency", "RON") ?: "RON"
+        contracts = prefs.getStringSet("contracts", setOf("General"))
+            ?.toMutableList() ?: mutableListOf("General")
 
+        if (contracts.isEmpty()) contracts.add("General")
+
+        activeContract = prefs.getString("active_contract", contracts.first())
+            ?: contracts.first()
+
+        if (activeContract !in contracts) activeContract = contracts.first()
+
+        loadContractSettings()
         buildScreen()
         showPeriod()
     }
@@ -53,12 +66,29 @@ class MainActivity : Activity() {
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density).toInt()
 
+    private fun contractId(): String =
+        Base64.getUrlEncoder().withoutPadding()
+            .encodeToString(activeContract.toByteArray(Charsets.UTF_8))
+
     private fun dateKey(date: Calendar): String =
         "%04d-%02d-%02d".format(
             date.get(Calendar.YEAR),
             date.get(Calendar.MONTH) + 1,
             date.get(Calendar.DAY_OF_MONTH)
         )
+
+    private fun dataKey(date: Calendar, type: String): String =
+        "${contractId()}_${dateKey(date)}_$type"
+
+    private fun settingKey(type: String): String =
+        "${contractId()}_$type"
+
+    private fun loadContractSettings() {
+        hourlyRate = prefs.getString(settingKey("rate"), "0")
+            ?.toDoubleOrNull() ?: 0.0
+
+        currency = prefs.getString(settingKey("currency"), "RON") ?: "RON"
+    }
 
     private fun buildScreen() {
         val root = LinearLayout(this).apply {
@@ -68,21 +98,38 @@ class MainActivity : Activity() {
         }
 
         val title = TextView(this).apply {
-            text = "PONTAJ BY MISCULAE"
-            textSize = 23f
+            text = "PONTAJ"
+            textSize = 30f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.rgb(25, 45, 75))
+            setTextColor(Color.rgb(15, 42, 78))
             gravity = Gravity.CENTER
-            setPadding(0, dp(10), 0, dp(14))
         }
         root.addView(title)
+
+        val subtitle = TextView(this).apply {
+            text = "by Misculae"
+            textSize = 19f
+            typeface = Typeface.create("serif", Typeface.ITALIC)
+            setTextColor(Color.rgb(190, 140, 35))
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, dp(12))
+        }
+        root.addView(subtitle)
+
+        val contractButton = Button(this).apply {
+            text = "Contract: $activeContract"
+            textSize = 15f
+            setOnClickListener { manageContracts() }
+        }
+        root.addView(contractButton)
+        contractText = contractButton
 
         periodText = TextView(this).apply {
             textSize = 17f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             setTextColor(Color.BLACK)
-            text = "Selectează perioada"
+            setPadding(0, dp(8), 0, dp(4))
         }
         root.addView(periodText)
 
@@ -101,18 +148,23 @@ class MainActivity : Activity() {
             setOnClickListener { chooseDate(false) }
         }
 
-        dateButtons.addView(startButton, LinearLayout.LayoutParams(0, dp(50), 1f))
-        dateButtons.addView(endButton, LinearLayout.LayoutParams(0, dp(50), 1f))
+        dateButtons.addView(
+            startButton,
+            LinearLayout.LayoutParams(0, dp(50), 1f)
+        )
+        dateButtons.addView(
+            endButton,
+            LinearLayout.LayoutParams(0, dp(50), 1f)
+        )
         root.addView(dateButtons)
 
-        val settings = Button(this).apply {
+        root.addView(Button(this).apply {
             text = "Setare tarif orar"
             setOnClickListener { editRate() }
-        }
-        root.addView(settings)
+        })
 
         totalHours = TextView(this).apply {
-            textSize = 17f
+            textSize = 18f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.rgb(30, 70, 110))
             setPadding(dp(8), dp(8), dp(8), dp(4))
@@ -120,7 +172,7 @@ class MainActivity : Activity() {
         root.addView(totalHours)
 
         totalPay = TextView(this).apply {
-            textSize = 17f
+            textSize = 18f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.rgb(30, 120, 70))
             setPadding(dp(8), dp(4), dp(8), dp(10))
@@ -133,11 +185,130 @@ class MainActivity : Activity() {
         }
         scroll.addView(content)
 
-        root.addView(scroll, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
-        ))
+        root.addView(
+            scroll,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                0,
+                1f
+            )
+        )
 
         setContentView(root)
+        contractText = root.getChildAt(2) as TextView
+    }
+
+    private fun manageContracts() {
+        val options = mutableListOf(
+            "Adaugă contract nou",
+            "Șterge contract"
+        )
+
+        options.addAll(contracts.map { "Selectează: $it" })
+
+        AlertDialog.Builder(this)
+            .setTitle("Contracte salvate")
+            .setItems(options.toTypedArray()) { _, which ->
+                when (which) {
+                    0 -> addContract()
+                    1 -> deleteContract()
+                    else -> {
+                        activeContract = contracts[which - 2]
+                        prefs.edit()
+                            .putString("active_contract", activeContract)
+                            .apply()
+                        loadContractSettings()
+                        updateContractTitle()
+                        showPeriod()
+                    }
+                }
+            }
+            .show()
+    }
+
+    private fun addContract() {
+        val input = EditText(this).apply {
+            hint = "Exemplu: Singapore"
+            inputType = InputType.TYPE_CLASS_TEXT or
+                InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Contract nou")
+            .setView(input)
+            .setPositiveButton("Salvează") { _, _ ->
+                val name = input.text.toString().trim()
+
+                if (name.isNotEmpty() && name !in contracts) {
+                    contracts.add(name)
+                    prefs.edit()
+                        .putStringSet("contracts", contracts.toSet())
+                        .apply()
+
+                    activeContract = name
+                    prefs.edit()
+                        .putString("active_contract", activeContract)
+                        .apply()
+
+                    loadContractSettings()
+                    updateContractTitle()
+                    showPeriod()
+                } else {
+                    Toast.makeText(
+                        this,
+                        "Numele este gol sau există deja.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+            .setNegativeButton("Anulează", null)
+            .show()
+    }
+
+    private fun deleteContract() {
+        if (contracts.size <= 1) {
+            Toast.makeText(
+                this,
+                "Trebuie să păstrezi cel puțin un contract.",
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Șterge contract")
+            .setItems(contracts.toTypedArray()) { _, which ->
+                val removed = contracts[which]
+
+                AlertDialog.Builder(this)
+                    .setMessage("Ștergi contractul $removed?")
+                    .setPositiveButton("Șterge") { _, _ ->
+                        contracts.remove(removed)
+
+                        if (activeContract == removed) {
+                            activeContract = contracts.first()
+                            prefs.edit()
+                                .putString("active_contract", activeContract)
+                                .apply()
+                        }
+
+                        prefs.edit()
+                            .putStringSet("contracts", contracts.toSet())
+                            .apply()
+
+                        loadContractSettings()
+                        updateContractTitle()
+                        showPeriod()
+                    }
+                    .setNegativeButton("Anulează", null)
+                    .show()
+            }
+            .setNegativeButton("Anulează", null)
+            .show()
+    }
+
+    private fun updateContractTitle() {
+        contractText.text = "Contract: $activeContract"
     }
 
     private fun chooseDate(isStart: Boolean) {
@@ -153,10 +324,14 @@ class MainActivity : Activity() {
 
                 if (isStart) {
                     startDate = chosen
-                    if (startDate.after(endDate)) endDate = chosen.clone() as Calendar
+                    if (startDate.after(endDate)) {
+                        endDate = chosen.clone() as Calendar
+                    }
                 } else {
                     endDate = chosen
-                    if (endDate.before(startDate)) startDate = chosen.clone() as Calendar
+                    if (endDate.before(startDate)) {
+                        startDate = chosen.clone() as Calendar
+                    }
                 }
 
                 showPeriod()
@@ -176,14 +351,13 @@ class MainActivity : Activity() {
         }
 
         val spinner = Spinner(this)
+        val currencies = arrayOf("RON", "EUR", "USD")
         spinner.adapter = ArrayAdapter(
             this,
             android.R.layout.simple_spinner_dropdown_item,
-            arrayOf("RON", "EUR", "USD")
+            currencies
         )
-        spinner.setSelection(
-            arrayOf("RON", "EUR", "USD").indexOf(currency).coerceAtLeast(0)
-        )
+        spinner.setSelection(currencies.indexOf(currency).coerceAtLeast(0))
 
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -192,17 +366,18 @@ class MainActivity : Activity() {
             addView(spinner)
         }
 
-        android.app.AlertDialog.Builder(this)
-            .setTitle("Tarif orar")
+        AlertDialog.Builder(this)
+            .setTitle("Tarif pentru $activeContract")
             .setView(box)
             .setPositiveButton("Salvează") { _, _ ->
                 hourlyRate = input.text.toString()
                     .replace(",", ".").toDoubleOrNull() ?: 0.0
+
                 currency = spinner.selectedItem.toString()
 
                 prefs.edit()
-                    .putString("rate", hourlyRate.toString())
-                    .putString("currency", currency)
+                    .putString(settingKey("rate"), hourlyRate.toString())
+                    .putString(settingKey("currency"), currency)
                     .apply()
 
                 showPeriod()
@@ -211,59 +386,62 @@ class MainActivity : Activity() {
             .show()
     }
 
-    private fun key(date: Calendar, type: String): String =
-        "${dateKey(date)}_$type"
-
     private fun getTime(date: Calendar, type: String): String =
-        prefs.getString(key(date, type), "") ?: ""
+        prefs.getString(dataKey(date, type), "") ?: ""
 
     private fun saveTime(date: Calendar, type: String, value: String) {
-        prefs.edit().putString(key(date, type), value).apply()
+        prefs.edit().putString(dataKey(date, type), value).apply()
     }
 
-    private fun workedHours(date: Calendar): Double {
-        val start = getTime(date, "in")
-        val end = getTime(date, "out")
-
-        if (start.isBlank() || end.isBlank()) return 0.0
-
-        return try {
-            val a = start.split(":")
-            val b = end.split(":")
-
-            val startMinutes = a[0].toInt() * 60 + a[1].toInt()
-            var endMinutes = b[0].toInt() * 60 + b[1].toInt()
-
-            if (endMinutes < startMinutes) endMinutes += 24 * 60
-
-            (endMinutes - startMinutes) / 60.0
-        } catch (_: Exception) {
-            0.0
+    private fun enterHour(date: Calendar, type: String) {
+        val input = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER
+            textSize = 22f
+            gravity = Gravity.CENTER
+            hint = "Exemplu: 8 sau 16"
+            setText(getTime(date, type))
+            selectAll()
         }
+
+        AlertDialog.Builder(this)
+            .setTitle(if (type == "in") "Ora de intrare" else "Ora de ieșire")
+            .setMessage("Introdu ora între 0 și 23, fără minute.")
+            .setView(input)
+            .setPositiveButton("Salvează") { _, _ ->
+                val value = input.text.toString().trim()
+                val hour = value.toIntOrNull()
+
+                if (value.isEmpty() || (hour != null && hour in 0..23)) {
+                    saveTime(date, type, value)
+                    showPeriod()
+                } else {
+                    Toast.makeText(
+                        this,
+                        "Introdu o oră între 0 și 23.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+            .setNeutralButton("Șterge") { _, _ ->
+                saveTime(date, type, "")
+                showPeriod()
+            }
+            .setNegativeButton("Anulează", null)
+            .show()
     }
 
-    private fun chooseTime(date: Calendar, type: String) {
-        val current = getTime(date, type)
-        val now = Calendar.getInstance()
+    private fun workedHours(date: Calendar): Int {
+        val start = getTime(date, "in").toIntOrNull() ?: return 0
+        val end = getTime(date, "out").toIntOrNull() ?: return 0
 
-        var hour = now.get(Calendar.HOUR_OF_DAY)
-        var minute = now.get(Calendar.MINUTE)
-
-        if (current.contains(":")) {
-            try {
-                hour = current.substringBefore(":").toInt()
-                minute = current.substringAfter(":").toInt()
-            } catch (_: Exception) {}
-        }
-
-        TimePickerDialog(this, { _, h, m ->
-            val value = "%02d:%02d".format(h, m)
-            saveTime(date, type, value)
-            showPeriod()
-        }, hour, minute, true).show()
+        var result = end - start
+        if (result < 0) result += 24
+        return result
     }
 
     private fun showPeriod() {
+        updateContractTitle()
+
         startButton.text = "De la: ${dateFormat.format(startDate.time)}"
         endButton.text = "Până la: ${dateFormat.format(endDate.time)}"
 
@@ -274,7 +452,7 @@ class MainActivity : Activity() {
 
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setBackgroundColor(Color.rgb(30, 55, 85))
+            setBackgroundColor(Color.rgb(15, 42, 78))
             setPadding(dp(3), dp(8), dp(3), dp(8))
         }
 
@@ -291,7 +469,7 @@ class MainActivity : Activity() {
 
         content.addView(header)
 
-        var sum = 0.0
+        var sum = 0
         val current = startDate.clone() as Calendar
 
         while (!current.after(endDate)) {
@@ -299,71 +477,72 @@ class MainActivity : Activity() {
             val hours = workedHours(date)
             sum += hours
 
+            val background = when {
+                hours == 0 -> Color.rgb(235, 237, 240)
+                hours < 10 -> Color.WHITE
+                hours < 12 -> Color.rgb(220, 245, 220)
+                hours < 14 -> Color.rgb(160, 220, 165)
+                else -> Color.rgb(215, 125, 125)
+            }
+
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(dp(2), dp(5), dp(2), dp(5))
-
-                setBackgroundColor(
-                    when {
-                        hours == 0.0 -> Color.rgb(235, 237, 240)
-                        hours < 10 -> Color.WHITE
-                        hours < 12 -> Color.rgb(220, 245, 220)
-                        hours < 14 -> Color.rgb(160, 220, 165)
-                        else -> Color.rgb(215, 125, 125)
-                    }
-                )
+                setBackgroundColor(background)
             }
 
             val dayText = TextView(this).apply {
-                text = "%02d.%02d".format(
-                    date.get(Calendar.DAY_OF_MONTH),
-                    date.get(Calendar.MONTH) + 1
-                )
+                text = dateFormat.format(date.time)
                 textSize = 12f
                 gravity = Gravity.CENTER
                 setTextColor(Color.BLACK)
             }
-            row.addView(dayText, LinearLayout.LayoutParams(0, dp(52), 0.9f))
+            row.addView(dayText, LinearLayout.LayoutParams(0, dp(52), 1.1f))
 
             val entry = Button(this).apply {
-                text = getTime(date, "in").ifBlank { "--:--" }
-                textSize = 14f
-                setOnClickListener { chooseTime(date, "in") }
+                text = getTime(date, "in").ifBlank { "--" }
+                textSize = 17f
+                setOnClickListener { enterHour(date, "in") }
             }
-            row.addView(entry, LinearLayout.LayoutParams(0, dp(48), 1.1f))
+            row.addView(entry, LinearLayout.LayoutParams(0, dp(48), 1f))
 
             val exit = Button(this).apply {
-                text = getTime(date, "out").ifBlank { "--:--" }
-                textSize = 14f
-                setOnClickListener { chooseTime(date, "out") }
+                text = getTime(date, "out").ifBlank { "--" }
+                textSize = 17f
+                setOnClickListener { enterHour(date, "out") }
             }
-            row.addView(exit, LinearLayout.LayoutParams(0, dp(48), 1.1f))
+            row.addView(exit, LinearLayout.LayoutParams(0, dp(48), 1f))
 
             val hoursText = TextView(this).apply {
-                text = if (hours == 0.0) "0" else "%.2f".format(hours)
-                textSize = 14f
+                text = hours.toString()
+                textSize = 15f
                 typeface = Typeface.DEFAULT_BOLD
                 gravity = Gravity.CENTER
                 setTextColor(Color.BLACK)
             }
-            row.addView(hoursText, LinearLayout.LayoutParams(0, dp(52), 1f))
+            row.addView(hoursText, LinearLayout.LayoutParams(0, dp(52), 0.8f))
 
             content.addView(row)
 
             val divider = View(this).apply {
                 setBackgroundColor(Color.rgb(210, 215, 220))
             }
-            content.addView(divider, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(1)
-            ))
+            content.addView(
+                divider,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    dp(1)
+                )
+            )
 
             current.add(Calendar.DAY_OF_MONTH, 1)
         }
 
-        totalHours.text = "Total ore: %.2f".format(sum)
+        totalHours.text = "Total ore: $sum"
         totalPay.text = "Total de plată: %.2f %s".format(
-            sum * hourlyRate, currency
+            sum * hourlyRate,
+            currency
         )
     }
 }
